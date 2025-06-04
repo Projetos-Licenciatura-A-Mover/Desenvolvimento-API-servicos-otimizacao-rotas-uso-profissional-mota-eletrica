@@ -1,7 +1,6 @@
 import os
 import json
 import uuid
-import shutil
 import subprocess
 import psycopg2
 from psycopg2.extras import Json
@@ -17,7 +16,7 @@ class UploadJSONView(APIView):
         if not files:
             return Response({"error": "Nenhum ficheiro enviado."}, status=status.HTTP_400_BAD_REQUEST)
 
-        script_dir = r'C:\Users\diogo\Desktop\Diogo\Utad\3º Ano\2º Semestre\Projeto\Final\Final' #alterar dependendo do path que se quiser
+        script_dir = r'C:\Users\diogo\Desktop\Diogo\Utad\3º Ano\2º Semestre\Projeto\Final\Final'
         input_dir = os.path.join(script_dir, "inputs")
         output_dir = os.path.join(script_dir, "outputs")
 
@@ -41,7 +40,7 @@ class UploadJSONView(APIView):
         return self.process_files(nomes_ficheiros_input, script_dir, input_dir, output_dir)
 
     def get(self, request):
-        script_dir = r'C:\Users\diogo\Desktop\Diogo\Utad\3º Ano\2º Semestre\Projeto\Final\Final' #alterar dependendo do path que se quiser
+        script_dir = r'C:\Users\diogo\Desktop\Diogo\Utad\3º Ano\2º Semestre\Projeto\Final\Final'
         input_dir = os.path.join(script_dir, "inputs")
         output_dir = os.path.join(script_dir, "outputs")
 
@@ -60,7 +59,6 @@ class UploadJSONView(APIView):
             )
             cursor = conn.cursor()
 
-            # ✅ MODO ATIVO: processar todos os inputs com is_used = false
             cursor.execute("SELECT id, name, content FROM inputs WHERE is_used = false")
             registos = cursor.fetchall()
             if not registos:
@@ -81,35 +79,6 @@ class UploadJSONView(APIView):
 
             conn.commit()
 
-            '''
-            # 💤 MODO OPCIONAL: processar apenas 1 input por chamada
-            cursor.execute("""
-                SELECT id, name, content FROM inputs
-                WHERE is_used = false
-                ORDER BY created_at
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            """)
-            row = cursor.fetchone()
-            if not row:
-                return Response({"message": "Nenhum ficheiro por processar."}, status=204)
-
-            db_id, name, content = row
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            random_id = uuid.uuid4().hex[:6]
-            input_filename = f"input_{timestamp}_{random_id}.json"
-            input_path = os.path.join(input_dir, input_filename)
-
-            with open(input_path, 'w', encoding='utf8') as f:
-                json.dump(content, f, ensure_ascii=False, indent=4)
-
-            nomes_ficheiros_input.append((input_filename, db_id))
-
-            # Marca como usado já
-            cursor.execute("UPDATE inputs SET is_used = true WHERE id = %s", (db_id,))
-            conn.commit()
-            '''
-
         except Exception as e:
             return Response({"error": f"Erro ao aceder à base de dados: {str(e)}"}, status=500)
         finally:
@@ -117,13 +86,11 @@ class UploadJSONView(APIView):
                 cursor.close()
                 conn.close()
 
-        nomes_ficheiros_simples = [n[0] for n in nomes_ficheiros_input]
-        response = self.process_files(nomes_ficheiros_simples, script_dir, input_dir, output_dir)
-
+        response = self.process_files(nomes_ficheiros_input, script_dir, input_dir, output_dir)
         return response
 
     def process_files(self, nomes_ficheiros_input, script_dir, input_dir, output_dir):
-        cmd = ["python", "filtro.py"] + nomes_ficheiros_input
+        cmd = ["python", "filtro.py"] + [n[0] if isinstance(n, tuple) else n for n in nomes_ficheiros_input]
         try:
             subprocess.run(cmd, cwd=script_dir, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -144,7 +111,13 @@ class UploadJSONView(APIView):
         outputs_guardados = []
         inseridos = 0
 
-        for f_input in nomes_ficheiros_input:
+        for entrada in nomes_ficheiros_input:
+            if isinstance(entrada, tuple):
+                f_input, input_id = entrada
+            else:
+                f_input = entrada
+                input_id = None
+
             nome_output_esperado = f"output_{f_input}"
             out_path = os.path.join(output_dir, nome_output_esperado)
             if os.path.exists(out_path):
@@ -155,10 +128,11 @@ class UploadJSONView(APIView):
                     print(f"[DEBUG] Output lido de {nome_output_esperado}: {conteudo}")
 
                     if isinstance(conteudo, list):
-                        for entrada in conteudo:
-                            algorithm_name = entrada.get("algoritmo")
-                            route = entrada.get("rota", [])
-                            cost_raw = entrada.get("custo")
+                        for resultado in conteudo:
+                            algorithm_name = resultado.get("algoritmo")
+                            route = resultado.get("rota", [])
+                            cost_raw = resultado.get("custo")
+                            energia_raw = resultado.get("energia_estimada")
 
                             try:
                                 cost = float(cost_raw)
@@ -166,14 +140,48 @@ class UploadJSONView(APIView):
                                 print(f"[ERRO] Valor inválido de custo: {cost_raw}")
                                 continue
 
+                            estimated_energy = None
+                            try:
+                                if energia_raw is not None:
+                                    estimated_energy = float(energia_raw)
+                            except (TypeError, ValueError):
+                                print(f"[AVISO] Energia inválida: {energia_raw}")
+
                             if algorithm_name:
-                                cursor.execute(
-                                    """
-                                    INSERT INTO results (file_output, algorithm_name, route, cost)
-                                    VALUES (%s, %s, %s, %s)
-                                    """,
-                                    (nome_output_esperado, algorithm_name, Json(route), cost)
-                                )
+                                if input_id is not None:
+                                    if estimated_energy is not None:
+                                        cursor.execute(
+                                            """
+                                            INSERT INTO results (file_output, algorithm_name, route, cost, input_id, estimated_energy)
+                                            VALUES (%s, %s, %s, %s, %s, %s)
+                                            """,
+                                            (nome_output_esperado, algorithm_name, Json(route), cost, input_id, estimated_energy)
+                                        )
+                                    else:
+                                        cursor.execute(
+                                            """
+                                            INSERT INTO results (file_output, algorithm_name, route, cost, input_id)
+                                            VALUES (%s, %s, %s, %s, %s)
+                                            """,
+                                            (nome_output_esperado, algorithm_name, Json(route), cost, input_id)
+                                        )
+                                else:
+                                    if estimated_energy is not None:
+                                        cursor.execute(
+                                            """
+                                            INSERT INTO results (file_output, algorithm_name, route, cost, estimated_energy)
+                                            VALUES (%s, %s, %s, %s, %s)
+                                            """,
+                                            (nome_output_esperado, algorithm_name, Json(route), cost, estimated_energy)
+                                        )
+                                    else:
+                                        cursor.execute(
+                                            """
+                                            INSERT INTO results (file_output, algorithm_name, route, cost)
+                                            VALUES (%s, %s, %s, %s)
+                                            """,
+                                            (nome_output_esperado, algorithm_name, Json(route), cost)
+                                        )
                                 inseridos += 1
                     else:
                         print(f"[ERRO] Formato inválido no output: {nome_output_esperado}")
@@ -189,7 +197,6 @@ class UploadJSONView(APIView):
         cursor.close()
         conn.close()
 
-        # Guardar log_execucao.json diretamente na base de dados (overwrite)
         filtro_log_path = os.path.join(script_dir, "logs", "log_execucao.json")
         if os.path.exists(filtro_log_path):
             try:
@@ -220,6 +227,6 @@ class UploadJSONView(APIView):
 
         return Response({
             "message": f"{inseridos} resultado(s) inserido(s) na base de dados com sucesso.",
-            "ficheiros_upload": nomes_ficheiros_input,
+            "ficheiros_upload": [n[0] if isinstance(n, tuple) else n for n in nomes_ficheiros_input],
             "outputs_processados": outputs_guardados
         }, status=status.HTTP_201_CREATED)
