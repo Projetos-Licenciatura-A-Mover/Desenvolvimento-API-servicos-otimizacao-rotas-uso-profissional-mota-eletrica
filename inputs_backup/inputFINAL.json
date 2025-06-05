@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": 0,
+      "x": -8.630699,
+      "y": 41.159653999999996,
+      "is_depot": true
+    },
+    {
+      "id": 1,
+      "x": -8.620080999999999,
+      "y": 41.169441,
+      "demand": 200,
+      "time_window": [
+        28800,
+        39600
+      ],
+      "service_time": 300
+    },
+    {
+      "id": 2,
+      "x": -8.639608,
+      "y": 41.150171,
+      "time_window": [
+        32400,
+        45000
+      ]
+    },
+    {
+      "id": 10,
+      "x": -8.634504,
+      "y": 41.155732,
+      "is_charging_station": true,
+      "charger_power_kw": null
+    }
+  ],
+  "vehicles": [
+    {
+      "id": 1,
+      "capacity": 484,
+      "battery_kwh": 70,
+      "start_node": 0,
+      "end_node": 0,
+      "speed_kph": 40
+    }
+  ]
+}

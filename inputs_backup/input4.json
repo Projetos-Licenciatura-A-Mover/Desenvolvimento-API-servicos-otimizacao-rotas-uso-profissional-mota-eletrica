@@ -1,0 +1,41 @@
+{
+  "nodes": [
+    {
+      "id": 0,
+      "x": -8.629090000000001,
+      "y": 41.159751,
+      "is_depot": true
+    },
+    {
+      "id": 1,
+      "x": -8.619287,
+      "y": 41.170083,
+      "demand": 200,
+      "service_time": 300
+    },
+    {
+      "id": 2,
+      "x": -8.640284000000001,
+      "y": 41.149693,
+      "demand": 150
+    },
+    {
+      "id": 10,
+      "x": -8.635999,
+      "y": 41.155701,
+      "is_charging_station": true,
+      "charger_power_kw": 50
+    }
+  ],
+  "vehicles": [
+    {
+      "id": 1,
+      "capacity": 513,
+      "battery_kwh": 70,
+      "start_node": 0,
+      "end_node": 0,
+      "speed_kph": 40
+    }
+  ],
+  "algorithm": "tabu_search"
+}
